@@ -12,6 +12,9 @@
 - [x] Animation system using named animations from GLTF
 - [x] Camera follows the player
 - [x] Space bar attack with melee animation (1H_Melee_Attack_Chop)
+- [x] Scale up castle (15x) so player can run around on top
+- [x] Player spawns on top of castle
+- [x] Floor collision prevents falling through
 
 ## In Progress
 

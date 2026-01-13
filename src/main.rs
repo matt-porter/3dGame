@@ -7,7 +7,12 @@ const RUN_ANIMATION: &str = "Running_B";
 const ATTACK_ANIMATION: &str = "1H_Melee_Attack_Chop";
 
 // Camera offset from player (looking from behind and above)
-const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 5.0, 10.0);
+const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 8.0, 15.0);
+
+// Castle configuration
+const CASTLE_SCALE: f32 = 15.0;
+const CASTLE_FLOOR_HEIGHT: f32 = 7.5; // Height of the castle floor the player walks on
+const PLAYER_START: Vec3 = Vec3::new(0.0, CASTLE_FLOOR_HEIGHT, 0.0);
 
 #[derive(Component)]
 struct Player;
@@ -53,37 +58,38 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    // Ground plane
+    // Ground plane (far below the castle)
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(20.0, 20.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.2, 0.4, 0.2))),
+        Transform::from_xyz(0.0, -5.0, 0.0),
     ));
 
-    // Castle model
+    // Castle model (scaled up so player can run on top)
     commands.spawn((
         SceneRoot(asset_server.load("models/castle.glb#Scene0")),
-        Transform::from_xyz(3.0, 0.0, 0.0),
+        Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(CASTLE_SCALE)),
     ));
 
     // Load the Knight GLTF (we'll extract named animations once it's loaded)
     let knight_gltf: Handle<Gltf> = asset_server.load("models/Knight.glb");
     commands.insert_resource(KnightGltf(knight_gltf.clone()));
 
-    // Knight character (player)
+    // Knight character (player) - spawns on top of the castle
     commands.spawn((
         SceneRoot(asset_server.load("models/Knight.glb#Scene0")),
-        Transform::from_xyz(0.0, 0.0, 0.0),
+        Transform::from_translation(PLAYER_START),
         Player,
     ));
 
-    // Light
+    // Light (adjusted for larger scene)
     commands.spawn((
         DirectionalLight {
-            illuminance: 10000.0,
+            illuminance: 15000.0,
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(20.0, 40.0, 20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // Camera (follows player)
@@ -269,6 +275,11 @@ fn player_movement(
         // Rotate to face movement direction
         let target_rotation = Quat::from_rotation_y(direction.x.atan2(direction.z));
         transform.rotation = transform.rotation.slerp(target_rotation, 10.0 * time.delta_secs());
+    }
+
+    // Floor collision - keep player on the castle floor
+    if transform.translation.y < CASTLE_FLOOR_HEIGHT {
+        transform.translation.y = CASTLE_FLOOR_HEIGHT;
     }
 
     // Control animation based on movement and sprint state
