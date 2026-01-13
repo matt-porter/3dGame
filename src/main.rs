@@ -10,9 +10,13 @@ const ATTACK_ANIMATION: &str = "1H_Melee_Attack_Chop";
 const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 8.0, 15.0);
 
 // Castle configuration
-const CASTLE_SCALE: f32 = 15.0;
-const CASTLE_FLOOR_HEIGHT: f32 = 7.5; // Height of the castle floor the player walks on
+const CASTLE_SCALE: f32 = 2.0;
+const CASTLE_FLOOR_HEIGHT: f32 = 8.; // Height of the castle courtyard floor
 const PLAYER_START: Vec3 = Vec3::new(0.0, CASTLE_FLOOR_HEIGHT, 0.0);
+
+// Castle boundary (approximate courtyard bounds)
+const CASTLE_BOUNDS_MIN: Vec3 = Vec3::new(-5.0, CASTLE_FLOOR_HEIGHT, -5.0);
+const CASTLE_BOUNDS_MAX: Vec3 = Vec3::new(3.0, CASTLE_FLOOR_HEIGHT, 3.0);
 
 #[derive(Component)]
 struct Player;
@@ -62,13 +66,14 @@ fn setup(
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.2, 0.4, 0.2))),
-        Transform::from_xyz(0.0, -5.0, 0.0),
+        Transform::from_xyz(0.0, 0.0, 0.0),
     ));
 
     // Castle model (scaled up so player can run on top)
     commands.spawn((
-        SceneRoot(asset_server.load("models/castle.glb#Scene0")),
-        Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(CASTLE_SCALE)),
+        SceneRoot(asset_server.load(
+            "models/castle.glb#Scene0")),
+        Transform::from_xyz(2.0 * CASTLE_SCALE, 0.0, 7.0*CASTLE_SCALE).with_scale(Vec3::splat(CASTLE_SCALE)),
     ));
 
     // Load the Knight GLTF (we'll extract named animations once it's loaded)
@@ -278,9 +283,11 @@ fn player_movement(
     }
 
     // Floor collision - keep player on the castle floor
-    if transform.translation.y < CASTLE_FLOOR_HEIGHT {
-        transform.translation.y = CASTLE_FLOOR_HEIGHT;
-    }
+    transform.translation.y = CASTLE_FLOOR_HEIGHT;
+
+    // Boundary collision - keep player within castle courtyard
+    transform.translation.x = transform.translation.x.clamp(CASTLE_BOUNDS_MIN.x, CASTLE_BOUNDS_MAX.x);
+    transform.translation.z = transform.translation.z.clamp(CASTLE_BOUNDS_MIN.z, CASTLE_BOUNDS_MAX.z);
 
     // Control animation based on movement and sprint state
     let desired_anim = if is_moving {

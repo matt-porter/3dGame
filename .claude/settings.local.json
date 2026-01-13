@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cargo build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: 3D game with player movement, animations, and combat\n\nFeatures:\n- Basic 3D scene with ground plane, lighting, and shadows\n- Knight player character with WASD movement\n- Castle model in scene\n- Walking animation \\(Walking_A\\) when moving\n- Sprint with Shift key \\(Running_B, faster speed\\)\n- Camera follows player\n- Space bar attack \\(1H_Melee_Attack_Chop\\)\n- Animation system using named GLTF animations\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)"
     ]
   }
 }
