@@ -7,10 +7,18 @@ const GRAVITY: f32 = -20.0;
 const JUMP_VELOCITY: f32 = 10.0;
 const MOUSE_SENSITIVITY: f32 = 0.003;
 
+// Enemy AI constants
+const ENEMY_WALK_SPEED: f32 = 2.0;
+const ENEMY_CHASE_SPEED: f32 = 4.0;
+const ENEMY_DETECTION_RANGE: f32 = 8.0;
+const ENEMY_ATTACK_RANGE: f32 = 2.0;
+const ENEMY_PATROL_RANGE: f32 = 3.0;
+
 const WALK_ANIMATION: &str = "Walking_A";
 const RUN_ANIMATION: &str = "Running_B";
 const ATTACK_ANIMATION: &str = "1H_Melee_Attack_Chop";
 const JUMP_ANIMATION: &str = "Jump_Full_Short";
+const IDLE_ANIMATION: &str = "Idle";
 
 // Camera distance and height behind player
 const CAMERA_DISTANCE: f32 = 10.0;
@@ -23,6 +31,26 @@ const PLAYER_START: Vec3 = Vec3::new(0.0, 15.0, 0.0);
 
 #[derive(Component)]
 struct Player;
+
+#[derive(Component)]
+struct Enemy;
+
+#[derive(Component, Default)]
+struct EnemyAi {
+    state: AiState,
+    home_position: Vec3,
+    patrol_target: Option<Vec3>,
+    state_timer: f32,
+}
+
+#[derive(Default, Clone, Copy, PartialEq)]
+enum AiState {
+    #[default]
+    Idle,
+    Patrol,
+    Chase,
+    Attack,
+}
 
 #[derive(Component)]
 struct FollowCamera;
@@ -39,8 +67,9 @@ struct VerticalVelocity(f32);
 struct KnightGltf(Handle<Gltf>);
 
 #[derive(Resource)]
-struct PlayerAnimations {
+struct GameAnimations {
     graph: Handle<AnimationGraph>,
+    idle_index: AnimationNodeIndex,
     walk_index: AnimationNodeIndex,
     run_index: AnimationNodeIndex,
     attack_index: AnimationNodeIndex,
@@ -70,9 +99,10 @@ fn main() {
             Update,
             (
                 load_animations,
-                setup_player_animation,
+                setup_character_animations,
                 mouse_look,
                 player_movement,
+                enemy_ai,
                 camera_follow,
             ),
         )
@@ -133,6 +163,31 @@ fn setup(
         },
     ));
 
+    // Spawn enemies at various positions on the castle
+    let enemy_positions = [
+        Vec3::new(-3.0, 15.0, -3.0),
+        Vec3::new(2.0, 15.0, -2.0),
+        Vec3::new(-2.0, 15.0, 2.0),
+    ];
+
+    for pos in enemy_positions {
+        commands.spawn((
+            SceneRoot(asset_server.load("models/Knight.glb#Scene0")),
+            Transform::from_translation(pos),
+            Enemy,
+            EnemyAi {
+                home_position: pos,
+                ..default()
+            },
+            RigidBody::KinematicPositionBased,
+            Collider::capsule_y(0.5, 0.3),
+            KinematicCharacterController {
+                snap_to_ground: Some(CharacterLength::Absolute(0.5)),
+                ..default()
+            },
+        ));
+    }
+
     // Light (adjusted for larger scene)
     commands.spawn((
         DirectionalLight {
@@ -157,7 +212,7 @@ fn load_animations(
     knight_gltf: Option<Res<KnightGltf>>,
     gltf_assets: Res<Assets<Gltf>>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
-    existing_animations: Option<Res<PlayerAnimations>>,
+    existing_animations: Option<Res<GameAnimations>>,
 ) {
     // Skip if animations already loaded
     if existing_animations.is_some() {
@@ -173,58 +228,38 @@ fn load_animations(
         return;
     };
 
-    // Get the walk animation by name
-    let Some(walk_clip) = gltf.named_animations.get(WALK_ANIMATION) else {
-        warn!(
-            "Animation '{}' not found in Knight.glb. Available animations: {:?}",
-            WALK_ANIMATION,
-            gltf.named_animations.keys().collect::<Vec<_>>()
-        );
-        return;
+    // Helper to get animation clip or warn
+    let get_clip = |name: &str| -> Option<Handle<AnimationClip>> {
+        gltf.named_animations.get(name).cloned().or_else(|| {
+            warn!(
+                "Animation '{}' not found in Knight.glb. Available: {:?}",
+                name,
+                gltf.named_animations.keys().collect::<Vec<_>>()
+            );
+            None
+        })
     };
 
-    // Get the run animation by name
-    let Some(run_clip) = gltf.named_animations.get(RUN_ANIMATION) else {
-        warn!(
-            "Animation '{}' not found in Knight.glb. Available animations: {:?}",
-            RUN_ANIMATION,
-            gltf.named_animations.keys().collect::<Vec<_>>()
-        );
-        return;
-    };
-
-    // Get the attack animation by name
-    let Some(attack_clip) = gltf.named_animations.get(ATTACK_ANIMATION) else {
-        warn!(
-            "Animation '{}' not found in Knight.glb. Available animations: {:?}",
-            ATTACK_ANIMATION,
-            gltf.named_animations.keys().collect::<Vec<_>>()
-        );
-        return;
-    };
-
-    // Get the jump animation by name
-    let Some(jump_clip) = gltf.named_animations.get(JUMP_ANIMATION) else {
-        warn!(
-            "Animation '{}' not found in Knight.glb. Available animations: {:?}",
-            JUMP_ANIMATION,
-            gltf.named_animations.keys().collect::<Vec<_>>()
-        );
-        return;
-    };
+    let Some(idle_clip) = get_clip(IDLE_ANIMATION) else { return };
+    let Some(walk_clip) = get_clip(WALK_ANIMATION) else { return };
+    let Some(run_clip) = get_clip(RUN_ANIMATION) else { return };
+    let Some(attack_clip) = get_clip(ATTACK_ANIMATION) else { return };
+    let Some(jump_clip) = get_clip(JUMP_ANIMATION) else { return };
 
     // Create animation graph with all animations
     let mut graph = AnimationGraph::new();
-    let walk_index = graph.add_clip(walk_clip.clone(), 1.0, graph.root);
-    let run_index = graph.add_clip(run_clip.clone(), 1.0, graph.root);
-    let attack_index = graph.add_clip(attack_clip.clone(), 1.0, graph.root);
-    let jump_index = graph.add_clip(jump_clip.clone(), 1.0, graph.root);
+    let idle_index = graph.add_clip(idle_clip, 1.0, graph.root);
+    let walk_index = graph.add_clip(walk_clip, 1.0, graph.root);
+    let run_index = graph.add_clip(run_clip, 1.0, graph.root);
+    let attack_index = graph.add_clip(attack_clip, 1.0, graph.root);
+    let jump_index = graph.add_clip(jump_clip, 1.0, graph.root);
     let graph_handle = graphs.add(graph);
 
     info!("Loaded animations from Knight.glb");
 
-    commands.insert_resource(PlayerAnimations {
+    commands.insert_resource(GameAnimations {
         graph: graph_handle,
+        idle_index,
         walk_index,
         run_index,
         attack_index,
@@ -232,33 +267,31 @@ fn load_animations(
     });
 }
 
-// Attaches the animation graph to the player's AnimationPlayer once the model is loaded
-fn setup_player_animation(
+// Attaches the animation graph to all characters (player and enemies) once their models are loaded
+fn setup_character_animations(
     mut commands: Commands,
-    animations: Option<Res<PlayerAnimations>>,
-    mut players: Query<(Entity, &mut AnimationPlayer), Without<AnimationSetupDone>>,
-    player_query: Query<Entity, With<Player>>,
+    animations: Option<Res<GameAnimations>>,
+    mut anim_players: Query<(Entity, &mut AnimationPlayer), Without<AnimationSetupDone>>,
+    characters: Query<Entity, Or<(With<Player>, With<Enemy>)>>,
     children: Query<&Children>,
 ) {
     let Some(animations) = animations else {
         return;
     };
 
-    // Find the player entity
-    let Ok(player_entity) = player_query.get_single() else {
-        return;
-    };
-
-    // Find the AnimationPlayer in the player's children (GLTF scenes nest the AnimationPlayer)
-    for entity in std::iter::once(player_entity).chain(children.iter_descendants(player_entity)) {
-        if let Ok((anim_entity, _)) = players.get_mut(entity) {
-            // Attach the animation graph, current animation tracker, and mark as set up
-            commands.entity(anim_entity).insert((
-                AnimationGraphHandle(animations.graph.clone()),
-                AnimationSetupDone,
-                CurrentAnimation::default(),
-            ));
-            return;
+    // Find all character entities (player and enemies)
+    for character_entity in characters.iter() {
+        // Find the AnimationPlayer in the character's children (GLTF scenes nest the AnimationPlayer)
+        for entity in std::iter::once(character_entity).chain(children.iter_descendants(character_entity)) {
+            if let Ok((anim_entity, _)) = anim_players.get_mut(entity) {
+                // Attach the animation graph, current animation tracker, and mark as set up
+                commands.entity(anim_entity).insert((
+                    AnimationGraphHandle(animations.graph.clone()),
+                    AnimationSetupDone,
+                    CurrentAnimation::default(),
+                ));
+                break;
+            }
         }
     }
 }
@@ -289,7 +322,7 @@ fn player_movement(
     mouse_button: Res<ButtonInput<MouseButton>>,
     time: Res<Time>,
     yaw: Res<PlayerYaw>,
-    animations: Option<Res<PlayerAnimations>>,
+    animations: Option<Res<GameAnimations>>,
     mut player_query: Query<
         (
             &Transform,
@@ -419,6 +452,168 @@ fn player_movement(
                 anim_player.play(anim_index).repeat();
             }
             current_anim.0 = desired_anim;
+        }
+    }
+}
+
+fn enemy_ai(
+    time: Res<Time>,
+    animations: Option<Res<GameAnimations>>,
+    player_query: Query<&Transform, With<Player>>,
+    mut enemy_query: Query<
+        (
+            Entity,
+            &mut Transform,
+            &mut EnemyAi,
+            &mut KinematicCharacterController,
+        ),
+        (With<Enemy>, Without<Player>),
+    >,
+    children: Query<&Children>,
+    mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
+) {
+    let Some(animations) = animations else {
+        return;
+    };
+
+    let Ok(player_transform) = player_query.get_single() else {
+        return;
+    };
+    let player_pos = player_transform.translation;
+
+    for (enemy_entity, mut transform, mut ai, mut controller) in enemy_query.iter_mut() {
+        let enemy_pos = transform.translation;
+        let distance_to_player = enemy_pos.distance(player_pos);
+        let direction_to_player = (player_pos - enemy_pos).normalize_or_zero();
+
+        // Update state timer
+        ai.state_timer += time.delta_secs();
+
+        // State transitions
+        let new_state = match ai.state {
+            AiState::Idle => {
+                if distance_to_player < ENEMY_DETECTION_RANGE {
+                    AiState::Chase
+                } else if ai.state_timer > 3.0 {
+                    ai.state_timer = 0.0;
+                    AiState::Patrol
+                } else {
+                    AiState::Idle
+                }
+            }
+            AiState::Patrol => {
+                if distance_to_player < ENEMY_DETECTION_RANGE {
+                    AiState::Chase
+                } else if ai.patrol_target.is_none() || ai.state_timer > 5.0 {
+                    ai.state_timer = 0.0;
+                    AiState::Idle
+                } else {
+                    AiState::Patrol
+                }
+            }
+            AiState::Chase => {
+                if distance_to_player < ENEMY_ATTACK_RANGE {
+                    ai.state_timer = 0.0;
+                    AiState::Attack
+                } else if distance_to_player > ENEMY_DETECTION_RANGE * 1.5 {
+                    AiState::Idle
+                } else {
+                    AiState::Chase
+                }
+            }
+            AiState::Attack => {
+                if ai.state_timer > 1.0 {
+                    ai.state_timer = 0.0;
+                    if distance_to_player < ENEMY_ATTACK_RANGE {
+                        AiState::Attack
+                    } else {
+                        AiState::Chase
+                    }
+                } else {
+                    AiState::Attack
+                }
+            }
+        };
+
+        // Handle state change
+        if new_state != ai.state {
+            ai.state = new_state;
+            if new_state == AiState::Patrol {
+                // Pick a random patrol point near home
+                let angle = ai.state_timer * 1000.0; // pseudo-random
+                ai.patrol_target = Some(
+                    ai.home_position
+                        + Vec3::new(angle.cos() * ENEMY_PATROL_RANGE, 0.0, angle.sin() * ENEMY_PATROL_RANGE),
+                );
+            }
+        }
+
+        // Execute current state behavior
+        let mut movement = Vec3::ZERO;
+        let mut desired_anim = None;
+
+        match ai.state {
+            AiState::Idle => {
+                desired_anim = Some(animations.idle_index);
+            }
+            AiState::Patrol => {
+                if let Some(target) = ai.patrol_target {
+                    let dir = (target - enemy_pos).normalize_or_zero();
+                    movement = dir * ENEMY_WALK_SPEED * time.delta_secs();
+                    movement.y = GRAVITY * time.delta_secs();
+
+                    // Face movement direction
+                    if dir.length_squared() > 0.01 {
+                        transform.rotation = Quat::from_rotation_y(dir.x.atan2(dir.z));
+                    }
+                }
+                desired_anim = Some(animations.walk_index);
+            }
+            AiState::Chase => {
+                let dir = Vec3::new(direction_to_player.x, 0.0, direction_to_player.z).normalize_or_zero();
+                movement = dir * ENEMY_CHASE_SPEED * time.delta_secs();
+                movement.y = GRAVITY * time.delta_secs();
+
+                // Face player
+                if dir.length_squared() > 0.01 {
+                    transform.rotation = Quat::from_rotation_y(dir.x.atan2(dir.z));
+                }
+                desired_anim = Some(animations.run_index);
+            }
+            AiState::Attack => {
+                // Face player during attack
+                let dir = Vec3::new(direction_to_player.x, 0.0, direction_to_player.z).normalize_or_zero();
+                if dir.length_squared() > 0.01 {
+                    transform.rotation = Quat::from_rotation_y(dir.x.atan2(dir.z));
+                }
+                movement.y = GRAVITY * time.delta_secs();
+                desired_anim = Some(animations.attack_index);
+            }
+        }
+
+        controller.translation = Some(movement);
+
+        // Update animation
+        if let Some(anim_entity) = std::iter::once(enemy_entity)
+            .chain(children.iter_descendants(enemy_entity))
+            .find(|e| anim_query.get(*e).is_ok())
+        {
+            if let Ok((mut anim_player, mut current_anim)) = anim_query.get_mut(anim_entity) {
+                // For attack animation, play once; for others, loop
+                if ai.state == AiState::Attack {
+                    if current_anim.0 != desired_anim {
+                        anim_player.stop_all();
+                        anim_player.play(animations.attack_index);
+                        current_anim.0 = desired_anim;
+                    }
+                } else if current_anim.0 != desired_anim {
+                    anim_player.stop_all();
+                    if let Some(anim_index) = desired_anim {
+                        anim_player.play(anim_index).repeat();
+                    }
+                    current_anim.0 = desired_anim;
+                }
+            }
         }
     }
 }

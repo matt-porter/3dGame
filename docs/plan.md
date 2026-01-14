@@ -18,9 +18,18 @@
 
 ## In Progress
 
-(none)
+- [ ] Health system and combat
+  - Player and enemy health tracking
+  - Hit detection with rapier collision events
+  - Blocking with right mouse button
 
 ## Completed Recently
+
+- [x] Enemy spawning and basic AI
+  - 3 enemy knights spawn on the castle
+  - AI states: Idle, Patrol, Chase, Attack
+  - Enemies detect player and chase/attack when in range
+  - Idle animation added for standing still
 
 - [x] Third-person camera that stays behind player
   - Camera rotates with player facing direction based on yaw
