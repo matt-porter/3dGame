@@ -18,12 +18,18 @@
 
 ## In Progress
 
-- [ ] Health system and combat
-  - Player and enemy health tracking
-  - Hit detection with rapier collision events
-  - Blocking with right mouse button
+- [ ] Visual effects and UI
+  - Particle effects for impact sparks
+  - Health bars HUD
 
 ## Completed Recently
+
+- [x] Health system and combat
+  - Player and enemy health tracking
+  - Hit detection (proximity-based during attacks)
+  - Blocking with right mouse button
+  - Hit_A animation on damage
+  - Death_A animation when health depleted
 
 - [x] Enemy spawning and basic AI
   - 3 enemy knights spawn on the castle

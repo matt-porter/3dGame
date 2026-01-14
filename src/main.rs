@@ -82,6 +82,20 @@ struct CombatState {
 #[derive(Component)]
 struct AttackHitbox;
 
+/// Event fired when a hit lands (for spawning impact effects)
+#[derive(Event)]
+struct HitEvent {
+    position: Vec3,
+    blocked: bool,
+}
+
+/// Marker for spark particles
+#[derive(Component)]
+struct SparkParticle {
+    lifetime: f32,
+    velocity: Vec3,
+}
+
 #[derive(Component)]
 struct FollowCamera;
 
@@ -127,6 +141,7 @@ fn main() {
         }))
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .init_resource::<PlayerYaw>()
+        .add_event::<HitEvent>()
         .add_systems(Startup, (setup, grab_cursor))
         .add_systems(
             Update,
@@ -137,6 +152,8 @@ fn main() {
                 player_movement,
                 enemy_ai,
                 combat_system,
+                spawn_impact_sparks,
+                update_particles,
                 camera_follow,
             ),
         )
@@ -680,6 +697,7 @@ fn combat_system(
     >,
     children: Query<&Children>,
     mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
+    mut hit_events: EventWriter<HitEvent>,
 ) {
     let Some(animations) = animations else {
         return;
@@ -726,8 +744,15 @@ fn combat_system(
             && !player_combat.is_hit
             && !player_combat.is_dead
         {
+            // Calculate impact position between enemy and player
+            let impact_pos = player_pos.lerp(enemy_pos, 0.3) + Vec3::Y * 1.0;
+
             if player_combat.is_blocking {
                 // Blocked - play block animation, no damage
+                hit_events.send(HitEvent {
+                    position: impact_pos,
+                    blocked: true,
+                });
                 if let Some(anim_entity) = find_animation_entity(player_entity, &children, &anim_query)
                 {
                     if let Ok((mut anim_player, mut current_anim)) = anim_query.get_mut(anim_entity) {
@@ -740,6 +765,10 @@ fn combat_system(
                 }
             } else {
                 // Hit - take damage
+                hit_events.send(HitEvent {
+                    position: impact_pos,
+                    blocked: false,
+                });
                 player_health.current -= 20.0;
                 player_combat.is_hit = true;
                 player_combat.hit_timer = 0.5;
@@ -787,7 +816,12 @@ fn combat_system(
                     && !enemy_combat.is_hit
                     && !enemy_combat.is_dead
                 {
-                    // Player hits enemy
+                    // Player hits enemy - spawn sparks at enemy position
+                    let impact_pos = enemy_pos.lerp(player_pos, 0.3) + Vec3::Y * 1.0;
+                    hit_events.send(HitEvent {
+                        position: impact_pos,
+                        blocked: false,
+                    });
                     enemy_health.current -= 25.0;
                     enemy_combat.is_hit = true;
                     enemy_combat.hit_timer = 0.5;
@@ -862,4 +896,75 @@ fn camera_follow(
 
     // Look at player
     camera_transform.look_at(player_transform.translation + Vec3::Y * 1.0, Vec3::Y);
+}
+
+/// Spawns spark particles when hits land
+fn spawn_impact_sparks(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut hit_events: EventReader<HitEvent>,
+) {
+    for event in hit_events.read() {
+        let spark_count = if event.blocked { 8 } else { 12 };
+        let color = if event.blocked {
+            Color::srgb(0.7, 0.7, 1.0) // Blue-ish for blocked
+        } else {
+            Color::srgb(1.0, 0.6, 0.2) // Orange for hits
+        };
+
+        // Spawn multiple spark particles
+        for _ in 0..spark_count {
+            // Random direction for spark
+            let angle = rand::random::<f32>() * std::f32::consts::TAU;
+            let elevation = rand::random::<f32>() * 0.5 + 0.3;
+            let speed = rand::random::<f32>() * 3.0 + 2.0;
+
+            let velocity = Vec3::new(
+                angle.cos() * speed * (1.0 - elevation),
+                elevation * speed,
+                angle.sin() * speed * (1.0 - elevation),
+            );
+
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.05, 0.05, 0.05))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: color,
+                    emissive: color.into(),
+                    ..default()
+                })),
+                Transform::from_translation(event.position),
+                SparkParticle {
+                    lifetime: 0.5,
+                    velocity,
+                },
+            ));
+        }
+    }
+}
+
+/// Updates and despawns spark particles
+fn update_particles(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut particles: Query<(Entity, &mut Transform, &mut SparkParticle)>,
+) {
+    let dt = time.delta_secs();
+    let gravity = Vec3::new(0.0, -15.0, 0.0);
+
+    for (entity, mut transform, mut particle) in particles.iter_mut() {
+        particle.lifetime -= dt;
+
+        if particle.lifetime <= 0.0 {
+            commands.entity(entity).despawn();
+        } else {
+            // Update position with velocity and gravity
+            particle.velocity += gravity * dt;
+            transform.translation += particle.velocity * dt;
+
+            // Scale down as lifetime decreases
+            let scale = particle.lifetime * 2.0;
+            transform.scale = Vec3::splat(scale.min(1.0));
+        }
+    }
 }
