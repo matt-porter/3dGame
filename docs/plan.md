@@ -18,11 +18,14 @@
 
 ## In Progress
 
-- [ ] Visual effects and UI
-  - Particle effects for impact sparks
-  - Health bars HUD
+(Nothing currently in progress)
 
 ## Completed Recently
+
+- [x] Visual effects and UI
+  - Impact spark particles on hits (orange) and blocks (blue)
+  - Player health bar HUD at top-left
+  - Debug logging for combat events
 
 - [x] Health system and combat
   - Player and enemy health tracking
@@ -54,24 +57,13 @@
 
 ## Planned
 
-### Combat & Enemies
-- [ ] Enemy spawning system
-  - Spawn enemy knights that patrol the castle
-  - Basic AI: idle, patrol, chase player, attack
-  - Use same Knight.glb model with different color/material
-- [ ] Health system
-  - Player and enemy health bars (UI)
-  - Hit detection using rapier collision events
-  - Hit_A/Hit_B animations when taking damage
-  - Death_A/Death_B animations on death
-- [ ] Combat improvements
-  - Block with right mouse button (Block/Blocking animations)
-  - Dodge roll with Q key (Dodge_Forward/Left/Right animations)
-  - Attack combos (chain multiple attack animations)
-  - Lock-on targeting for enemies
+### Combat Improvements
+- [ ] Dodge roll with Q key (Dodge_Forward/Left/Right animations)
+- [ ] Attack combos (chain multiple attack animations)
+- [ ] Lock-on targeting for enemies
+- [ ] Enemy health bars (floating above enemies)
 
 ### Player Abilities
-- [ ] Idle animation when standing still
 - [ ] Magic/ranged attacks
   - Spellcast animations with particle effects
   - Projectile spawning and physics
@@ -80,7 +72,6 @@
 ### Visual & Audio
 - [ ] Particle effects
   - Sword swing trails
-  - Impact sparks on hit
   - Magic spell effects
 - [ ] Sound effects
   - Footsteps, sword swings, impacts
@@ -89,7 +80,6 @@
 
 ### Camera & UI
 - [ ] Camera collision to prevent clipping through walls
-- [ ] Health/stamina bars HUD
 - [ ] Simple main menu (Play, Quit)
 - [ ] Pause menu with ESC key
 

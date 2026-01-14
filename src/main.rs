@@ -404,6 +404,7 @@ fn player_movement(
             &mut KinematicCharacterController,
             &mut VerticalVelocity,
             Option<&KinematicCharacterControllerOutput>,
+            &CombatState,
         ),
         With<Player>,
     >,
@@ -411,11 +412,16 @@ fn player_movement(
     player_entity_query: Query<Entity, With<Player>>,
     mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
 ) {
-    let Ok((_transform, mut controller, mut vertical_velocity, controller_output)) =
+    let Ok((_transform, mut controller, mut vertical_velocity, controller_output, combat_state)) =
         player_query.get_single_mut()
     else {
         return;
     };
+
+    // Don't process movement or animations if player is dead
+    if combat_state.is_dead {
+        return;
+    }
 
     let Some(animations) = animations else {
         return;
