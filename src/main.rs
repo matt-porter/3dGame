@@ -99,6 +99,16 @@ struct SparkParticle {
 #[derive(Component)]
 struct FollowCamera;
 
+/// Marker for player health bar UI
+#[derive(Component)]
+struct PlayerHealthBar;
+
+/// Marker for enemy health bar (world-space billboard)
+#[derive(Component)]
+struct EnemyHealthBar {
+    enemy: Entity,
+}
+
 /// Tracks player's yaw rotation (controlled by mouse)
 #[derive(Resource, Default)]
 struct PlayerYaw(f32);
@@ -142,7 +152,7 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .init_resource::<PlayerYaw>()
         .add_event::<HitEvent>()
-        .add_systems(Startup, (setup, grab_cursor))
+        .add_systems(Startup, (setup, grab_cursor, setup_player_health_ui))
         .add_systems(
             Update,
             (
@@ -154,6 +164,7 @@ fn main() {
                 combat_system,
                 spawn_impact_sparks,
                 update_particles,
+                update_player_health_bar,
                 camera_follow,
             ),
         )
@@ -972,4 +983,68 @@ fn update_particles(
             transform.scale = Vec3::splat(scale.min(1.0));
         }
     }
+}
+
+/// Creates the player health bar UI at the top of the screen
+fn setup_player_health_ui(mut commands: Commands) {
+    // Root container at top-left
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(20.0),
+            top: Val::Px(20.0),
+            flex_direction: FlexDirection::Column,
+            ..default()
+        })
+        .with_children(|parent| {
+            // Health label
+            parent.spawn((
+                Text::new("Health"),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+            ));
+
+            // Health bar background
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Px(200.0),
+                        height: Val::Px(20.0),
+                        margin: UiRect::top(Val::Px(5.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.2, 0.2, 0.2)),
+                ))
+                .with_children(|bar_bg| {
+                    // Health bar fill
+                    bar_bg.spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.8, 0.2, 0.2)),
+                        PlayerHealthBar,
+                    ));
+                });
+        });
+}
+
+/// Updates the player health bar width based on current health
+fn update_player_health_bar(
+    player_query: Query<&Health, With<Player>>,
+    mut health_bar_query: Query<&mut Node, With<PlayerHealthBar>>,
+) {
+    let Ok(health) = player_query.get_single() else {
+        return;
+    };
+    let Ok(mut bar_node) = health_bar_query.get_single_mut() else {
+        return;
+    };
+
+    let health_percent = (health.current / health.max * 100.0).max(0.0);
+    bar_node.width = Val::Percent(health_percent);
 }
