@@ -39,4 +39,46 @@
 
 ## Planned
 
-(none)
+### Combat & Enemies
+- [ ] Enemy spawning system
+  - Spawn enemy knights that patrol the castle
+  - Basic AI: idle, patrol, chase player, attack
+  - Use same Knight.glb model with different color/material
+- [ ] Health system
+  - Player and enemy health bars (UI)
+  - Hit detection using rapier collision events
+  - Hit_A/Hit_B animations when taking damage
+  - Death_A/Death_B animations on death
+- [ ] Combat improvements
+  - Block with right mouse button (Block/Blocking animations)
+  - Dodge roll with Q key (Dodge_Forward/Left/Right animations)
+  - Attack combos (chain multiple attack animations)
+  - Lock-on targeting for enemies
+
+### Player Abilities
+- [ ] Idle animation when standing still
+- [ ] Magic/ranged attacks
+  - Spellcast animations with particle effects
+  - Projectile spawning and physics
+- [ ] Stamina system for attacks/dodge/sprint
+
+### Visual & Audio
+- [ ] Particle effects
+  - Sword swing trails
+  - Impact sparks on hit
+  - Magic spell effects
+- [ ] Sound effects
+  - Footsteps, sword swings, impacts
+  - Background ambient sounds
+- [ ] Day/night cycle with dynamic lighting
+
+### Camera & UI
+- [ ] Camera collision to prevent clipping through walls
+- [ ] Health/stamina bars HUD
+- [ ] Simple main menu (Play, Quit)
+- [ ] Pause menu with ESC key
+
+### World
+- [ ] Collectible items (health potions, coins)
+- [ ] Multiple areas/levels to explore
+- [ ] Interactive objects (doors, chests)
