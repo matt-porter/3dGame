@@ -25,7 +25,9 @@
 - [x] Visual effects and UI
   - Impact spark particles on hits (orange) and blocks (blue)
   - Player health bar HUD at top-left
+  - Enemy health bars (floating billboards above enemies)
   - Debug logging for combat events
+  - Enemies despawn 3 seconds after death
 
 - [x] Health system and combat
   - Player and enemy health tracking
@@ -61,7 +63,6 @@
 - [ ] Dodge roll with Q key (Dodge_Forward/Left/Right animations)
 - [ ] Attack combos (chain multiple attack animations)
 - [ ] Lock-on targeting for enemies
-- [ ] Enemy health bars (floating above enemies)
 
 ### Player Abilities
 - [ ] Magic/ranged attacks

@@ -553,6 +553,7 @@ fn enemy_ai(
             &mut Transform,
             &mut EnemyAi,
             &mut KinematicCharacterController,
+            &CombatState,
         ),
         (With<Enemy>, Without<Player>),
     >,
@@ -568,7 +569,11 @@ fn enemy_ai(
     };
     let player_pos = player_transform.translation;
 
-    for (enemy_entity, mut transform, mut ai, mut controller) in enemy_query.iter_mut() {
+    for (enemy_entity, mut transform, mut ai, mut controller, combat_state) in enemy_query.iter_mut() {
+        // Skip dead enemies - let death animation play
+        if combat_state.is_dead {
+            continue;
+        }
         let enemy_pos = transform.translation;
         let distance_to_player = enemy_pos.distance(player_pos);
         let direction_to_player = (player_pos - enemy_pos).normalize_or_zero();
