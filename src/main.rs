@@ -1,28 +1,39 @@
-use bevy::{gltf::Gltf, prelude::*};
+use bevy::{gltf::Gltf, input::mouse::MouseMotion, prelude::*, window::CursorGrabMode};
+use bevy_rapier3d::prelude::*;
 
 const WALK_SPEED: f32 = 5.0;
 const RUN_SPEED: f32 = 10.0;
+const GRAVITY: f32 = -20.0;
+const JUMP_VELOCITY: f32 = 10.0;
+const MOUSE_SENSITIVITY: f32 = 0.003;
+
 const WALK_ANIMATION: &str = "Walking_A";
 const RUN_ANIMATION: &str = "Running_B";
 const ATTACK_ANIMATION: &str = "1H_Melee_Attack_Chop";
+const JUMP_ANIMATION: &str = "Jump_Full_Short";
 
-// Camera offset from player (looking from behind and above)
-const CAMERA_OFFSET: Vec3 = Vec3::new(0.0, 8.0, 15.0);
+// Camera distance and height behind player
+const CAMERA_DISTANCE: f32 = 10.0;
+const CAMERA_HEIGHT: f32 = 5.0;
 
 // Castle configuration
 const CASTLE_SCALE: f32 = 2.0;
-const CASTLE_FLOOR_HEIGHT: f32 = 8.; // Height of the castle courtyard floor
-const PLAYER_START: Vec3 = Vec3::new(0.0, CASTLE_FLOOR_HEIGHT, 0.0);
-
-// Castle boundary (approximate courtyard bounds)
-const CASTLE_BOUNDS_MIN: Vec3 = Vec3::new(-5.0, CASTLE_FLOOR_HEIGHT, -5.0);
-const CASTLE_BOUNDS_MAX: Vec3 = Vec3::new(3.0, CASTLE_FLOOR_HEIGHT, 3.0);
+// Player spawns above the castle and falls onto it
+const PLAYER_START: Vec3 = Vec3::new(0.0, 15.0, 0.0);
 
 #[derive(Component)]
 struct Player;
 
 #[derive(Component)]
 struct FollowCamera;
+
+/// Tracks player's yaw rotation (controlled by mouse)
+#[derive(Resource, Default)]
+struct PlayerYaw(f32);
+
+/// Tracks vertical velocity for jumping
+#[derive(Component, Default)]
+struct VerticalVelocity(f32);
 
 #[derive(Resource)]
 struct KnightGltf(Handle<Gltf>);
@@ -33,6 +44,7 @@ struct PlayerAnimations {
     walk_index: AnimationNodeIndex,
     run_index: AnimationNodeIndex,
     attack_index: AnimationNodeIndex,
+    jump_index: AnimationNodeIndex,
 }
 
 #[derive(Component)]
@@ -51,9 +63,26 @@ fn main() {
             }),
             ..default()
         }))
-        .add_systems(Startup, setup)
-        .add_systems(Update, (load_animations, setup_player_animation, player_movement, camera_follow))
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .init_resource::<PlayerYaw>()
+        .add_systems(Startup, (setup, grab_cursor))
+        .add_systems(
+            Update,
+            (
+                load_animations,
+                setup_player_animation,
+                mouse_look,
+                player_movement,
+                camera_follow,
+            ),
+        )
         .run();
+}
+
+fn grab_cursor(mut windows: Query<&mut Window>) {
+    let mut window = windows.single_mut();
+    window.cursor_options.grab_mode = CursorGrabMode::Locked;
+    window.cursor_options.visible = false;
 }
 
 fn setup(
@@ -67,24 +96,41 @@ fn setup(
         Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.2, 0.4, 0.2))),
         Transform::from_xyz(0.0, 0.0, 0.0),
+        RigidBody::Fixed,
+        Collider::halfspace(Vec3::Y).unwrap(),
     ));
 
     // Castle model (scaled up so player can run on top)
+    // AsyncSceneCollider generates trimesh colliders from the scene's meshes
     commands.spawn((
-        SceneRoot(asset_server.load(
-            "models/castle.glb#Scene0")),
-        Transform::from_xyz(2.0 * CASTLE_SCALE, 0.0, 7.0*CASTLE_SCALE).with_scale(Vec3::splat(CASTLE_SCALE)),
+        SceneRoot(asset_server.load("models/castle.glb#Scene0")),
+        Transform::from_xyz(2.0 * CASTLE_SCALE, 0.0, 7.0 * CASTLE_SCALE)
+            .with_scale(Vec3::splat(CASTLE_SCALE)),
+        AsyncSceneCollider {
+            shape: Some(ComputedColliderShape::TriMesh(TriMeshFlags::default())),
+            named_shapes: default(),
+        },
+        RigidBody::Fixed,
     ));
 
     // Load the Knight GLTF (we'll extract named animations once it's loaded)
     let knight_gltf: Handle<Gltf> = asset_server.load("models/Knight.glb");
     commands.insert_resource(KnightGltf(knight_gltf.clone()));
 
-    // Knight character (player) - spawns on top of the castle
+    // Knight character (player) - spawns above the castle and falls onto it
+    // Initial rotation faces away from camera (yaw=0 + PI)
     commands.spawn((
         SceneRoot(asset_server.load("models/Knight.glb#Scene0")),
-        Transform::from_translation(PLAYER_START),
+        Transform::from_translation(PLAYER_START)
+            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
         Player,
+        VerticalVelocity::default(),
+        RigidBody::KinematicPositionBased,
+        Collider::capsule_y(0.5, 0.3),
+        KinematicCharacterController {
+            snap_to_ground: Some(CharacterLength::Absolute(0.5)),
+            ..default()
+        },
     ));
 
     // Light (adjusted for larger scene)
@@ -100,7 +146,7 @@ fn setup(
     // Camera (follows player)
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(CAMERA_OFFSET.x, CAMERA_OFFSET.y, CAMERA_OFFSET.z).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(0.0, CAMERA_HEIGHT, CAMERA_DISTANCE).looking_at(Vec3::ZERO, Vec3::Y),
         FollowCamera,
     ));
 }
@@ -157,11 +203,22 @@ fn load_animations(
         return;
     };
 
+    // Get the jump animation by name
+    let Some(jump_clip) = gltf.named_animations.get(JUMP_ANIMATION) else {
+        warn!(
+            "Animation '{}' not found in Knight.glb. Available animations: {:?}",
+            JUMP_ANIMATION,
+            gltf.named_animations.keys().collect::<Vec<_>>()
+        );
+        return;
+    };
+
     // Create animation graph with all animations
     let mut graph = AnimationGraph::new();
     let walk_index = graph.add_clip(walk_clip.clone(), 1.0, graph.root);
     let run_index = graph.add_clip(run_clip.clone(), 1.0, graph.root);
     let attack_index = graph.add_clip(attack_clip.clone(), 1.0, graph.root);
+    let jump_index = graph.add_clip(jump_clip.clone(), 1.0, graph.root);
     let graph_handle = graphs.add(graph);
 
     info!("Loaded animations from Knight.glb");
@@ -171,6 +228,7 @@ fn load_animations(
         walk_index,
         run_index,
         attack_index,
+        jump_index,
     });
 }
 
@@ -205,16 +263,49 @@ fn setup_player_animation(
     }
 }
 
+/// Updates player yaw based on mouse movement
+fn mouse_look(
+    mut mouse_motion: EventReader<MouseMotion>,
+    mut yaw: ResMut<PlayerYaw>,
+    mut player_query: Query<&mut Transform, With<Player>>,
+) {
+    let mut delta_x = 0.0;
+    for event in mouse_motion.read() {
+        delta_x += event.delta.x;
+    }
+
+    if delta_x != 0.0 {
+        yaw.0 -= delta_x * MOUSE_SENSITIVITY;
+
+        // Update player rotation to face away from camera (add PI to face forward)
+        if let Ok(mut transform) = player_query.get_single_mut() {
+            transform.rotation = Quat::from_rotation_y(yaw.0 + std::f32::consts::PI);
+        }
+    }
+}
+
 fn player_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
     time: Res<Time>,
+    yaw: Res<PlayerYaw>,
     animations: Option<Res<PlayerAnimations>>,
-    mut player_query: Query<&mut Transform, With<Player>>,
+    mut player_query: Query<
+        (
+            &Transform,
+            &mut KinematicCharacterController,
+            &mut VerticalVelocity,
+            Option<&KinematicCharacterControllerOutput>,
+        ),
+        With<Player>,
+    >,
     children: Query<&Children>,
     player_entity_query: Query<Entity, With<Player>>,
     mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
 ) {
-    let Ok(mut transform) = player_query.get_single_mut() else {
+    let Ok((_transform, mut controller, mut vertical_velocity, controller_output)) =
+        player_query.get_single_mut()
+    else {
         return;
     };
 
@@ -237,16 +328,29 @@ fn player_movement(
         return;
     };
 
-    // Check if currently attacking (attack animation is playing and not finished)
-    let is_attacking = current_anim.0 == Some(animations.attack_index)
-        && !anim_player.all_finished();
+    let grounded = controller_output.map(|o| o.grounded).unwrap_or(false);
 
-    // Handle attack input (space bar)
-    if keyboard.just_pressed(KeyCode::Space) && !is_attacking {
+    // Check if currently attacking (attack animation is playing and not finished)
+    let is_attacking =
+        current_anim.0 == Some(animations.attack_index) && !anim_player.all_finished();
+
+    // Check if currently jumping (jump animation is playing and not finished)
+    let is_jumping = current_anim.0 == Some(animations.jump_index) && !anim_player.all_finished();
+
+    // Handle attack input (left mouse button)
+    if mouse_button.just_pressed(MouseButton::Left) && !is_attacking && !is_jumping && grounded {
         anim_player.stop_all();
         anim_player.play(animations.attack_index);
         current_anim.0 = Some(animations.attack_index);
         return; // Don't process movement this frame
+    }
+
+    // Handle jump input (space bar)
+    if keyboard.just_pressed(KeyCode::Space) && grounded && !is_attacking && !is_jumping {
+        vertical_velocity.0 = JUMP_VELOCITY;
+        anim_player.stop_all();
+        anim_player.play(animations.jump_index);
+        current_anim.0 = Some(animations.jump_index);
     }
 
     // Don't allow movement while attacking
@@ -254,61 +358,75 @@ fn player_movement(
         return;
     }
 
-    let mut direction = Vec3::ZERO;
+    // Get forward and right vectors based on player yaw
+    let forward = Vec3::new(-yaw.0.sin(), 0.0, -yaw.0.cos());
+    let right = Vec3::new(forward.z, 0.0, -forward.x);
 
+    // Build movement direction from input
+    // W/S = forward/backward, A/D = strafe left/right
+    let mut direction = Vec3::ZERO;
     if keyboard.pressed(KeyCode::KeyW) {
-        direction.z -= 1.0;
+        direction += forward;
     }
     if keyboard.pressed(KeyCode::KeyS) {
-        direction.z += 1.0;
+        direction -= forward;
     }
     if keyboard.pressed(KeyCode::KeyA) {
-        direction.x -= 1.0;
+        direction += right;
     }
     if keyboard.pressed(KeyCode::KeyD) {
-        direction.x += 1.0;
+        direction -= right;
     }
 
     let is_moving = direction != Vec3::ZERO;
     let is_running = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
     let speed = if is_running { RUN_SPEED } else { WALK_SPEED };
 
+    // Calculate horizontal movement
+    let mut movement = Vec3::ZERO;
     if is_moving {
         direction = direction.normalize();
-        transform.translation += direction * speed * time.delta_secs();
-
-        // Rotate to face movement direction
-        let target_rotation = Quat::from_rotation_y(direction.x.atan2(direction.z));
-        transform.rotation = transform.rotation.slerp(target_rotation, 10.0 * time.delta_secs());
+        movement = direction * speed * time.delta_secs();
     }
 
-    // Floor collision - keep player on the castle floor
-    transform.translation.y = CASTLE_FLOOR_HEIGHT;
-
-    // Boundary collision - keep player within castle courtyard
-    transform.translation.x = transform.translation.x.clamp(CASTLE_BOUNDS_MIN.x, CASTLE_BOUNDS_MAX.x);
-    transform.translation.z = transform.translation.z.clamp(CASTLE_BOUNDS_MIN.z, CASTLE_BOUNDS_MAX.z);
-
-    // Control animation based on movement and sprint state
-    let desired_anim = if is_moving {
-        Some(if is_running { animations.run_index } else { animations.walk_index })
+    // Apply gravity and vertical velocity
+    if grounded && vertical_velocity.0 <= 0.0 {
+        vertical_velocity.0 = 0.0;
     } else {
-        None
-    };
+        vertical_velocity.0 += GRAVITY * time.delta_secs();
+    }
+    movement.y = vertical_velocity.0 * time.delta_secs();
 
-    // Switch animation if needed
-    if current_anim.0 != desired_anim {
-        anim_player.stop_all();
-        if let Some(anim_index) = desired_anim {
-            anim_player.play(anim_index).repeat();
+    // Set the desired translation on the character controller
+    controller.translation = Some(movement);
+
+    // Control animation based on movement and sprint state (only when grounded and not jumping)
+    if grounded && !is_jumping {
+        let desired_anim = if is_moving {
+            Some(if is_running {
+                animations.run_index
+            } else {
+                animations.walk_index
+            })
+        } else {
+            None
+        };
+
+        // Switch animation if needed
+        if current_anim.0 != desired_anim {
+            anim_player.stop_all();
+            if let Some(anim_index) = desired_anim {
+                anim_player.play(anim_index).repeat();
+            }
+            current_anim.0 = desired_anim;
         }
-        current_anim.0 = desired_anim;
     }
 }
 
 fn camera_follow(
     player_query: Query<&Transform, With<Player>>,
     mut camera_query: Query<&mut Transform, (With<FollowCamera>, Without<Player>)>,
+    yaw: Res<PlayerYaw>,
 ) {
     let Ok(player_transform) = player_query.get_single() else {
         return;
@@ -317,10 +435,16 @@ fn camera_follow(
         return;
     };
 
-    // Position camera at offset from player
-    let target_position = player_transform.translation + CAMERA_OFFSET;
+    // Calculate camera position behind player based on yaw
+    let offset = Vec3::new(
+        yaw.0.sin() * CAMERA_DISTANCE,
+        CAMERA_HEIGHT,
+        yaw.0.cos() * CAMERA_DISTANCE,
+    );
+
+    let target_position = player_transform.translation + offset;
     camera_transform.translation = target_position;
 
     // Look at player
-    camera_transform.look_at(player_transform.translation, Vec3::Y);
+    camera_transform.look_at(player_transform.translation + Vec3::Y * 1.0, Vec3::Y);
 }

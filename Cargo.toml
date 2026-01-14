@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 bevy = "0.15"
+bevy_rapier3d = "0.28"
 
 # Enable optimizations for dependencies in dev builds for better performance
 [profile.dev.package."*"]
