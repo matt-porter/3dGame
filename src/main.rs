@@ -749,6 +749,7 @@ fn combat_system(
 
             if player_combat.is_blocking {
                 // Blocked - play block animation, no damage
+                info!("Player blocked attack!");
                 hit_events.send(HitEvent {
                     position: impact_pos,
                     blocked: true,
@@ -770,12 +771,14 @@ fn combat_system(
                     blocked: false,
                 });
                 player_health.current -= 20.0;
+                info!("Player hit! Health: {}/{}", player_health.current, player_health.max);
                 player_combat.is_hit = true;
                 player_combat.hit_timer = 0.5;
 
                 if player_health.current <= 0.0 {
                     player_health.current = 0.0;
                     player_combat.is_dead = true;
+                    info!("Player died!");
                     // Play death animation
                     if let Some(anim_entity) =
                         find_animation_entity(player_entity, &children, &anim_query)
@@ -823,12 +826,14 @@ fn combat_system(
                         blocked: false,
                     });
                     enemy_health.current -= 25.0;
+                    info!("Enemy hit! Health: {}/{}", enemy_health.current, enemy_health.max);
                     enemy_combat.is_hit = true;
                     enemy_combat.hit_timer = 0.5;
 
                     if enemy_health.current <= 0.0 {
                         enemy_health.current = 0.0;
                         enemy_combat.is_dead = true;
+                        info!("Enemy died!");
                         // Play death animation
                         if let Some(anim_entity) =
                             find_animation_entity(enemy_entity, &children, &anim_query)
