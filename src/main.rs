@@ -19,6 +19,9 @@ const RUN_ANIMATION: &str = "Running_B";
 const ATTACK_ANIMATION: &str = "1H_Melee_Attack_Chop";
 const JUMP_ANIMATION: &str = "Jump_Full_Short";
 const IDLE_ANIMATION: &str = "Idle";
+const HIT_ANIMATION: &str = "Hit_A";
+const DEATH_ANIMATION: &str = "Death_A";
+const BLOCK_ANIMATION: &str = "Blocking";
 
 // Camera distance and height behind player
 const CAMERA_DISTANCE: f32 = 10.0;
@@ -53,6 +56,33 @@ enum AiState {
 }
 
 #[derive(Component)]
+struct Health {
+    current: f32,
+    max: f32,
+}
+
+impl Default for Health {
+    fn default() -> Self {
+        Self {
+            current: 100.0,
+            max: 100.0,
+        }
+    }
+}
+
+#[derive(Component, Default)]
+struct CombatState {
+    is_blocking: bool,
+    is_hit: bool,
+    is_dead: bool,
+    hit_timer: f32,
+}
+
+/// Marker for the attack hitbox sensor
+#[derive(Component)]
+struct AttackHitbox;
+
+#[derive(Component)]
 struct FollowCamera;
 
 /// Tracks player's yaw rotation (controlled by mouse)
@@ -74,6 +104,9 @@ struct GameAnimations {
     run_index: AnimationNodeIndex,
     attack_index: AnimationNodeIndex,
     jump_index: AnimationNodeIndex,
+    hit_index: AnimationNodeIndex,
+    death_index: AnimationNodeIndex,
+    block_index: AnimationNodeIndex,
 }
 
 #[derive(Component)]
@@ -103,6 +136,7 @@ fn main() {
                 mouse_look,
                 player_movement,
                 enemy_ai,
+                combat_system,
                 camera_follow,
             ),
         )
@@ -154,6 +188,8 @@ fn setup(
         Transform::from_translation(PLAYER_START)
             .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
         Player,
+        Health::default(),
+        CombatState::default(),
         VerticalVelocity::default(),
         RigidBody::KinematicPositionBased,
         Collider::capsule_y(0.5, 0.3),
@@ -179,6 +215,8 @@ fn setup(
                 home_position: pos,
                 ..default()
             },
+            Health::default(),
+            CombatState::default(),
             RigidBody::KinematicPositionBased,
             Collider::capsule_y(0.5, 0.3),
             KinematicCharacterController {
@@ -245,6 +283,9 @@ fn load_animations(
     let Some(run_clip) = get_clip(RUN_ANIMATION) else { return };
     let Some(attack_clip) = get_clip(ATTACK_ANIMATION) else { return };
     let Some(jump_clip) = get_clip(JUMP_ANIMATION) else { return };
+    let Some(hit_clip) = get_clip(HIT_ANIMATION) else { return };
+    let Some(death_clip) = get_clip(DEATH_ANIMATION) else { return };
+    let Some(block_clip) = get_clip(BLOCK_ANIMATION) else { return };
 
     // Create animation graph with all animations
     let mut graph = AnimationGraph::new();
@@ -253,6 +294,9 @@ fn load_animations(
     let run_index = graph.add_clip(run_clip, 1.0, graph.root);
     let attack_index = graph.add_clip(attack_clip, 1.0, graph.root);
     let jump_index = graph.add_clip(jump_clip, 1.0, graph.root);
+    let hit_index = graph.add_clip(hit_clip, 1.0, graph.root);
+    let death_index = graph.add_clip(death_clip, 1.0, graph.root);
+    let block_index = graph.add_clip(block_clip, 1.0, graph.root);
     let graph_handle = graphs.add(graph);
 
     info!("Loaded animations from Knight.glb");
@@ -264,6 +308,9 @@ fn load_animations(
         run_index,
         attack_index,
         jump_index,
+        hit_index,
+        death_index,
+        block_index,
     });
 }
 
@@ -616,6 +663,179 @@ fn enemy_ai(
             }
         }
     }
+}
+
+/// Handles combat: blocking, hit detection, damage, and death
+fn combat_system(
+    time: Res<Time>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    animations: Option<Res<GameAnimations>>,
+    mut player_query: Query<
+        (Entity, &Transform, &mut Health, &mut CombatState),
+        (With<Player>, Without<Enemy>),
+    >,
+    mut enemy_query: Query<
+        (Entity, &Transform, &mut Health, &mut CombatState, &EnemyAi),
+        (With<Enemy>, Without<Player>),
+    >,
+    children: Query<&Children>,
+    mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
+) {
+    let Some(animations) = animations else {
+        return;
+    };
+
+    // Get player info
+    let Ok((player_entity, player_transform, mut player_health, mut player_combat)) =
+        player_query.get_single_mut()
+    else {
+        return;
+    };
+
+    // Handle player blocking
+    player_combat.is_blocking = mouse_button.pressed(MouseButton::Right) && !player_combat.is_dead;
+
+    // Update hit timer
+    if player_combat.is_hit {
+        player_combat.hit_timer -= time.delta_secs();
+        if player_combat.hit_timer <= 0.0 {
+            player_combat.is_hit = false;
+        }
+    }
+
+    let player_pos = player_transform.translation;
+
+    // Check enemy attacks hitting player
+    for (enemy_entity, enemy_transform, mut enemy_health, mut enemy_combat, enemy_ai) in
+        enemy_query.iter_mut()
+    {
+        let enemy_pos = enemy_transform.translation;
+        let distance = player_pos.distance(enemy_pos);
+
+        // Update enemy hit timer
+        if enemy_combat.is_hit {
+            enemy_combat.hit_timer -= time.delta_secs();
+            if enemy_combat.hit_timer <= 0.0 {
+                enemy_combat.is_hit = false;
+            }
+        }
+
+        // Enemy attack hits player
+        if enemy_ai.state == AiState::Attack
+            && distance < ENEMY_ATTACK_RANGE
+            && !player_combat.is_hit
+            && !player_combat.is_dead
+        {
+            if player_combat.is_blocking {
+                // Blocked - play block animation, no damage
+                if let Some(anim_entity) = find_animation_entity(player_entity, &children, &anim_query)
+                {
+                    if let Ok((mut anim_player, mut current_anim)) = anim_query.get_mut(anim_entity) {
+                        if current_anim.0 != Some(animations.block_index) {
+                            anim_player.stop_all();
+                            anim_player.play(animations.block_index);
+                            current_anim.0 = Some(animations.block_index);
+                        }
+                    }
+                }
+            } else {
+                // Hit - take damage
+                player_health.current -= 20.0;
+                player_combat.is_hit = true;
+                player_combat.hit_timer = 0.5;
+
+                if player_health.current <= 0.0 {
+                    player_health.current = 0.0;
+                    player_combat.is_dead = true;
+                    // Play death animation
+                    if let Some(anim_entity) =
+                        find_animation_entity(player_entity, &children, &anim_query)
+                    {
+                        if let Ok((mut anim_player, mut current_anim)) = anim_query.get_mut(anim_entity)
+                        {
+                            anim_player.stop_all();
+                            anim_player.play(animations.death_index);
+                            current_anim.0 = Some(animations.death_index);
+                        }
+                    }
+                } else {
+                    // Play hit animation
+                    if let Some(anim_entity) =
+                        find_animation_entity(player_entity, &children, &anim_query)
+                    {
+                        if let Ok((mut anim_player, mut current_anim)) = anim_query.get_mut(anim_entity)
+                        {
+                            anim_player.stop_all();
+                            anim_player.play(animations.hit_index);
+                            current_anim.0 = Some(animations.hit_index);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check if player attack hits this enemy
+        // We check by looking at current animation of player
+        if let Some(player_anim_entity) = find_animation_entity(player_entity, &children, &anim_query)
+        {
+            if let Ok((anim_player, current_anim)) = anim_query.get(player_anim_entity) {
+                let is_player_attacking = current_anim.0 == Some(animations.attack_index)
+                    && !anim_player.all_finished();
+
+                if is_player_attacking
+                    && distance < ENEMY_ATTACK_RANGE * 1.5
+                    && !enemy_combat.is_hit
+                    && !enemy_combat.is_dead
+                {
+                    // Player hits enemy
+                    enemy_health.current -= 25.0;
+                    enemy_combat.is_hit = true;
+                    enemy_combat.hit_timer = 0.5;
+
+                    if enemy_health.current <= 0.0 {
+                        enemy_health.current = 0.0;
+                        enemy_combat.is_dead = true;
+                        // Play death animation
+                        if let Some(anim_entity) =
+                            find_animation_entity(enemy_entity, &children, &anim_query)
+                        {
+                            if let Ok((mut anim_player, mut current_anim)) =
+                                anim_query.get_mut(anim_entity)
+                            {
+                                anim_player.stop_all();
+                                anim_player.play(animations.death_index);
+                                current_anim.0 = Some(animations.death_index);
+                            }
+                        }
+                    } else {
+                        // Play hit animation
+                        if let Some(anim_entity) =
+                            find_animation_entity(enemy_entity, &children, &anim_query)
+                        {
+                            if let Ok((mut anim_player, mut current_anim)) =
+                                anim_query.get_mut(anim_entity)
+                            {
+                                anim_player.stop_all();
+                                anim_player.play(animations.hit_index);
+                                current_anim.0 = Some(animations.hit_index);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Helper to find the AnimationPlayer entity for a character
+fn find_animation_entity(
+    character: Entity,
+    children: &Query<&Children>,
+    anim_query: &Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
+) -> Option<Entity> {
+    std::iter::once(character)
+        .chain(children.iter_descendants(character))
+        .find(|e| anim_query.get(*e).is_ok())
 }
 
 fn camera_follow(

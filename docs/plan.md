@@ -91,3 +91,6 @@
 - [ ] Collectible items (health potions, coins)
 - [ ] Multiple areas/levels to explore
 - [ ] Interactive objects (doors, chests)
+
+### Bugs / Issues
+- [ ] Player doesn't drop to floor properly - castle collision mesh may not be precise enough
