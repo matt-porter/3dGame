@@ -76,7 +76,10 @@ struct CombatState {
     is_hit: bool,
     is_dead: bool,
     hit_timer: f32,
+    death_timer: f32,
 }
+
+const DEATH_DESPAWN_TIME: f32 = 3.0; // Seconds after death before despawning
 
 /// Marker for the attack hitbox sensor
 #[derive(Component)]
@@ -165,6 +168,9 @@ fn main() {
                 spawn_impact_sparks,
                 update_particles,
                 update_player_health_bar,
+                spawn_enemy_health_bars,
+                update_enemy_health_bars,
+                despawn_dead_enemies,
                 camera_follow,
             ),
         )
@@ -850,6 +856,7 @@ fn combat_system(
                     if enemy_health.current <= 0.0 {
                         enemy_health.current = 0.0;
                         enemy_combat.is_dead = true;
+                        enemy_combat.death_timer = DEATH_DESPAWN_TIME;
                         info!("Enemy died!");
                         // Play death animation
                         if let Some(anim_entity) =
@@ -1053,4 +1060,131 @@ fn update_player_health_bar(
 
     let health_percent = (health.current / health.max * 100.0).max(0.0);
     bar_node.width = Val::Percent(health_percent);
+}
+
+/// Spawns floating health bars above enemies that don't have one yet
+fn spawn_enemy_health_bars(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    enemies: Query<Entity, (With<Enemy>, Without<EnemyHealthBar>)>,
+    health_bars: Query<&EnemyHealthBar>,
+) {
+    for enemy_entity in enemies.iter() {
+        // Check if this enemy already has a health bar
+        let has_bar = health_bars.iter().any(|bar| bar.enemy == enemy_entity);
+        if has_bar {
+            continue;
+        }
+
+        // Create health bar background (dark)
+        let bg_mesh = meshes.add(Cuboid::new(1.0, 0.1, 0.05));
+        let bg_material = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 0.2, 0.2),
+            unlit: true,
+            ..default()
+        });
+
+        // Create health bar fill (red)
+        let fill_mesh = meshes.add(Cuboid::new(1.0, 0.1, 0.05));
+        let fill_material = materials.add(StandardMaterial {
+            base_color: Color::srgb(0.8, 0.2, 0.2),
+            unlit: true,
+            ..default()
+        });
+
+        // Spawn background
+        commands.spawn((
+            Mesh3d(bg_mesh),
+            MeshMaterial3d(bg_material),
+            Transform::from_xyz(0.0, 2.5, 0.0),
+            EnemyHealthBar { enemy: enemy_entity },
+        ));
+
+        // Spawn fill (slightly in front of background)
+        commands.spawn((
+            Mesh3d(fill_mesh),
+            MeshMaterial3d(fill_material),
+            Transform::from_xyz(0.0, 2.5, 0.03),
+            EnemyHealthBarFill { enemy: enemy_entity },
+        ));
+    }
+}
+
+/// Marker for the fill portion of enemy health bar
+#[derive(Component)]
+struct EnemyHealthBarFill {
+    enemy: Entity,
+}
+
+/// Updates enemy health bar positions and scales
+fn update_enemy_health_bars(
+    mut bar_query: Query<(&mut Transform, &EnemyHealthBar), Without<EnemyHealthBarFill>>,
+    mut fill_query: Query<(&mut Transform, &EnemyHealthBarFill), Without<EnemyHealthBar>>,
+    enemy_query: Query<(&Transform, &Health), (With<Enemy>, Without<EnemyHealthBar>, Without<EnemyHealthBarFill>)>,
+    camera_query: Query<&Transform, (With<FollowCamera>, Without<Enemy>, Without<EnemyHealthBar>, Without<EnemyHealthBarFill>)>,
+) {
+    let Ok(camera_transform) = camera_query.get_single() else {
+        return;
+    };
+
+    // Update background bars
+    for (mut bar_transform, health_bar) in bar_query.iter_mut() {
+        if let Ok((enemy_transform, _health)) = enemy_query.get(health_bar.enemy) {
+            // Position above enemy
+            bar_transform.translation = enemy_transform.translation + Vec3::Y * 2.5;
+            // Face camera (billboard)
+            bar_transform.look_at(camera_transform.translation, Vec3::Y);
+        }
+    }
+
+    // Update fill bars
+    for (mut fill_transform, health_bar_fill) in fill_query.iter_mut() {
+        if let Ok((enemy_transform, health)) = enemy_query.get(health_bar_fill.enemy) {
+            let health_percent = health.current / health.max;
+            // Position above enemy, slightly in front of background
+            fill_transform.translation = enemy_transform.translation + Vec3::Y * 2.5;
+            // Face camera
+            fill_transform.look_at(camera_transform.translation, Vec3::Y);
+            // Scale based on health (scale X axis)
+            fill_transform.scale.x = health_percent.max(0.0);
+            // Offset to align left edge
+            let local_forward = fill_transform.forward();
+            let local_right = local_forward.cross(Vec3::Y).normalize();
+            fill_transform.translation -= local_right * (1.0 - health_percent) * 0.5;
+        }
+    }
+}
+
+/// Despawns enemies after their death animation finishes
+fn despawn_dead_enemies(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut enemy_query: Query<(Entity, &mut CombatState), With<Enemy>>,
+    health_bars: Query<(Entity, &EnemyHealthBar)>,
+    health_bar_fills: Query<(Entity, &EnemyHealthBarFill)>,
+) {
+    for (enemy_entity, mut combat_state) in enemy_query.iter_mut() {
+        if combat_state.is_dead {
+            combat_state.death_timer -= time.delta_secs();
+
+            if combat_state.death_timer <= 0.0 {
+                info!("Despawning enemy");
+                // Despawn the enemy
+                commands.entity(enemy_entity).despawn_recursive();
+
+                // Despawn associated health bars
+                for (bar_entity, bar) in health_bars.iter() {
+                    if bar.enemy == enemy_entity {
+                        commands.entity(bar_entity).despawn();
+                    }
+                }
+                for (fill_entity, fill) in health_bar_fills.iter() {
+                    if fill.enemy == enemy_entity {
+                        commands.entity(fill_entity).despawn();
+                    }
+                }
+            }
+        }
+    }
 }
