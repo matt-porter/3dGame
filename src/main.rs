@@ -222,7 +222,7 @@ fn setup(
         Transform::from_translation(PLAYER_START)
             .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
         Player,
-        Health::default(),
+        Health { current: 200.0, max: 200.0 },
         CombatState::default(),
         VerticalVelocity::default(),
         RigidBody::KinematicPositionBased,

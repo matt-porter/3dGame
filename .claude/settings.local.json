@@ -9,7 +9,8 @@
       "WebSearch",
       "Bash(cargo run:*)",
       "Bash(powershell -Command \"Start-Sleep -Seconds 8\")",
-      "Bash(powershell -Command \"Start-Sleep -Seconds 12\")"
+      "Bash(powershell -Command \"Start-Sleep -Seconds 12\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 10\")"
     ]
   }
 }
