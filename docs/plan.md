@@ -20,6 +20,23 @@
 
 (none)
 
+## Completed Recently
+
+- [x] Third-person camera that stays behind player
+  - Camera rotates with player facing direction based on yaw
+  - PlayerYaw resource tracks mouse-controlled rotation
+
+- [x] Mouse-based controls overhaul
+  - Mouse controls player/camera direction
+  - A/D keys for strafe left/right
+  - Left mouse button for attack
+  - Space bar for jump with Jump_Full_Short animation
+
+- [x] Add physics-based collision using bevy_rapier3d
+  - Generate castle collider from mesh (trimesh via AsyncSceneCollider)
+  - Add capsule collider + KinematicCharacterController to player
+  - Removed manual floor height and boundary constants
+
 ## Planned
 
 (none)
