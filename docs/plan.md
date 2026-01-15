@@ -57,37 +57,142 @@
   - Add capsule collider + KinematicCharacterController to player
   - Removed manual floor height and boundary constants
 
-## Planned
+## Priority 1: Code Refactoring ✅ COMPLETED
 
-### Combat Improvements
-- [ ] Dodge roll with Q key (Dodge_Forward/Left/Right animations)
-- [ ] Attack combos (chain multiple attack animations)
-- [ ] Lock-on targeting for enemies
+Refactored from ~1200 lines single file to modular plugin architecture (~140 lines in main.rs):
 
-### Player Abilities
+### Modular Structure ✅
+- [x] Created plugin-based architecture following Bevy 0.15 best practices
+  - `src/lib.rs` - Plugin registry and exports
+  - `src/states/mod.rs` - AppState (Loading/Menu/Playing/Paused), CombatState substate
+  - `src/core/` - InputPlugin, CameraPlugin (with collision)
+  - `src/gameplay/` - PlayerPlugin, CombatPlugin, AIPlugin, HealthPlugin
+  - `src/visual/` - ParticlePlugin, HealthBarPlugin
+
+### State Management ✅
+- [x] AppState enum (Loading, Menu, Playing, Paused)
+- [x] CombatState as SubState (Idle, Attacking, Blocking, Dodging, Stunned)
+- [x] run_if(in_state(AppState::Playing)) on all gameplay systems
+
+### System Organization ✅
+- [x] Centralized input handling into PlayerInput resource (core/input.rs)
+
+## Priority 2: Camera & Core Improvements ✅ COMPLETED
+
+- [x] Camera collision to prevent clipping through walls
+  - Rapier raycast from player head to desired camera position
+  - Camera pulls closer when obstacles detected
+  - Smooth interpolation to avoid jitter (CAMERA_SMOOTHING = 10.0)
+
+## Priority 3: Combat Improvements
+
+### Stamina System ✅ COMPLETED
+- [x] Stamina component (current, max, recovery_rate)
+- [x] Stamina recovery system (recovers when not blocking)
+- [x] Stamina bar UI below health bar (gold color)
+- [x] Stamina costs defined (attack: 20, dodge: 25, block drain: 15/s)
+- [ ] Integrate stamina cost checks into combat (attacks, blocking)
+
+### Dodge Roll
+- [ ] Q key triggers dodge roll
+- [ ] Direction based on movement input (or forward if none)
+- [ ] Dodge_Forward/Left/Right animations
+- [ ] Brief invincibility frames during dodge
+
+### Attack Combos
+- [ ] Chain multiple attack animations on repeated input
+- [ ] Timing window for combo continuation
+- [ ] Different animations per combo hit (1H_Melee_Attack_Chop → Stab → Slice)
+
+### Lock-on Targeting
+- [ ] Tab key to lock onto nearest enemy
+- [ ] Visual indicator on locked target
+- [ ] Camera focuses on target
+- [ ] Attacks auto-orient toward target
+
+## Priority 4: UI & Menus
+
+- [ ] Simple main menu (Play, Quit)
+  - Menu state with UI buttons
+  - Transition to Playing state on Play
+- [ ] Pause menu with ESC key
+  - PauseState substate
+  - Resume, Quit to Menu options
+  - Time scale = 0 while paused
+- [ ] Stamina bar UI
+
+## Priority 5: Visual & Audio
+
+### Particle Effects
+- [ ] Sword swing trails
+- [ ] Magic spell effects (for future ranged attacks)
+
+### Sound Effects
+- [ ] Footsteps (walk/run variations)
+- [ ] Sword swings and impacts
+- [ ] Block sounds
+- [ ] Background ambient sounds
+
+### Lighting
+- [ ] Day/night cycle with dynamic lighting (stretch goal)
+
+## Priority 6: Player Abilities (Future)
+
 - [ ] Magic/ranged attacks
   - Spellcast animations with particle effects
   - Projectile spawning and physics
-- [ ] Stamina system for attacks/dodge/sprint
 
-### Visual & Audio
-- [ ] Particle effects
-  - Sword swing trails
-  - Magic spell effects
-- [ ] Sound effects
-  - Footsteps, sword swings, impacts
-  - Background ambient sounds
-- [ ] Day/night cycle with dynamic lighting
+## Priority 7: World (Future)
 
-### Camera & UI
-- [ ] Camera collision to prevent clipping through walls
-- [ ] Simple main menu (Play, Quit)
-- [ ] Pause menu with ESC key
-
-### World
 - [ ] Collectible items (health potions, coins)
 - [ ] Multiple areas/levels to explore
 - [ ] Interactive objects (doors, chests)
 
-### Bugs / Issues
+## Bugs / Issues
+
 - [ ] Player doesn't drop to floor properly - castle collision mesh may not be precise enough
+
+## Architecture Notes
+
+### Recommended Module Structure
+```
+src/
+├── main.rs              # Entry point (minimal)
+├── lib.rs               # Plugin registry + state definitions
+├── states/
+│   ├── mod.rs           # AppState, GameState enums
+│   ├── menu.rs          # Menu plugin
+│   └── gameplay.rs      # Gameplay plugin
+├── core/
+│   ├── mod.rs
+│   ├── input.rs         # Unified input handling
+│   ├── camera/
+│   │   ├── mod.rs
+│   │   └── collision.rs # Camera collision
+│   └── physics.rs       # Rapier wrapper
+├── gameplay/
+│   ├── mod.rs
+│   ├── player/
+│   │   ├── mod.rs
+│   │   ├── movement.rs
+│   │   └── animation.rs
+│   ├── combat/
+│   │   ├── mod.rs
+│   │   ├── stamina.rs
+│   │   └── hit.rs
+│   ├── ai/
+│   │   ├── mod.rs
+│   │   └── state_machine.rs
+│   └── health.rs
+└── visual/
+    ├── mod.rs
+    ├── particles.rs
+    └── health_bar.rs
+```
+
+### Key Bevy 0.15 Patterns
+- Use `States` for main flow (Menu → Playing → Paused)
+- Use `SubStates` for nested state (CombatState only while Playing)
+- Use `OnEnter`/`OnExit` for state transition setup/cleanup
+- Use `run_if(in_state(...))` for conditional systems
+- Use `SystemSets` and `.chain()` for system ordering

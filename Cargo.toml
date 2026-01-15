@@ -3,6 +3,14 @@ name = "game_3d"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "threegame"
+path = "src/lib.rs"
+
+[[bin]]
+name = "game_3d"
+path = "src/main.rs"
+
 [dependencies]
 bevy = "0.15"
 bevy_rapier3d = "0.28"

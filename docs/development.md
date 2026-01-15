@@ -1,5 +1,10 @@
 # Development Guide
 
+See also:
+- [architecture.md](architecture.md) - Module structure and plugin design
+- [plan.md](plan.md) - Development roadmap and task tracking
+- [assets.md](assets.md) - Asset formats and Knight animations
+
 ## Build Commands
 
 ```bash
