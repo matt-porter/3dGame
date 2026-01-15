@@ -3,6 +3,7 @@ use bevy_rapier3d::prelude::*;
 
 use super::components::{Player, VerticalVelocity, GRAVITY, JUMP_VELOCITY, RUN_SPEED, WALK_SPEED};
 use super::animation::GameAnimations;
+use super::dodge::Dodging;
 use super::CurrentAnimation;
 use crate::core::camera::PlayerYaw;
 use crate::gameplay::combat::CombatStatus;
@@ -20,6 +21,7 @@ pub fn player_movement(
             &mut VerticalVelocity,
             Option<&KinematicCharacterControllerOutput>,
             &CombatStatus,
+            Option<&Dodging>,
         ),
         With<Player>,
     >,
@@ -27,13 +29,18 @@ pub fn player_movement(
     player_entity_query: Query<Entity, With<Player>>,
     mut anim_query: Query<(&mut AnimationPlayer, &mut CurrentAnimation)>,
 ) {
-    let Ok((_transform, mut controller, mut vertical_velocity, controller_output, combat_state)) =
+    let Ok((_transform, mut controller, mut vertical_velocity, controller_output, combat_state, maybe_dodging)) =
         player_query.get_single_mut()
     else {
         return;
     };
 
     if combat_state.is_dead {
+        return;
+    }
+
+    // Skip movement while dodging (dodge system handles movement)
+    if maybe_dodging.is_some() {
         return;
     }
 

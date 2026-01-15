@@ -10,6 +10,8 @@ pub use components::*;
 pub use dodge::*;
 pub use movement::*;
 
+use crate::states::AppState;
+
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -19,9 +21,8 @@ impl Plugin for PlayerPlugin {
             (
                 load_animations,
                 setup_character_animations,
-                handle_dodge,
-                update_dodge,
-                player_movement,
+                (handle_dodge, update_dodge, player_movement)
+                    .run_if(in_state(AppState::Playing)),
             ),
         );
     }

@@ -93,10 +93,13 @@ Refactored from ~1200 lines single file to modular plugin architecture (~140 lin
 - [x] Stamina costs defined (attack: 20, dodge: 25, block drain: 15/s)
 - [ ] Integrate stamina cost checks into combat (attacks, blocking)
 
-### Dodge Roll
-- [ ] Q key triggers dodge roll
-- [ ] Direction based on movement input (or forward if none)
-- [ ] Dodge_Forward/Left/Right animations
+### Dodge Roll ✅ COMPLETED
+- [x] Q key triggers dodge roll
+- [x] Direction based on movement input (or forward if none)
+- [x] Dodge costs stamina (25)
+- [x] Movement system skips while dodging
+- [x] Dodge animation constants defined
+- [ ] Play appropriate dodge animation (Forward/Left/Right/Backward)
 - [ ] Brief invincibility frames during dodge
 
 ### Attack Combos
