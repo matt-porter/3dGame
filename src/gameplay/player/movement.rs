@@ -6,13 +6,14 @@ use super::animation::GameAnimations;
 use super::dodge::Dodging;
 use super::CurrentAnimation;
 use crate::core::camera::PlayerYaw;
+use crate::core::input::PlayerInput;
 use crate::gameplay::combat::CombatStatus;
 
 pub fn player_movement(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mouse_button: Res<ButtonInput<MouseButton>>,
     time: Res<Time>,
     player_yaw: Res<PlayerYaw>,
+    mut input: ResMut<PlayerInput>,
     animations: Option<Res<GameAnimations>>,
     mut player_query: Query<
         (
@@ -36,6 +37,7 @@ pub fn player_movement(
     };
 
     if combat_state.is_dead {
+        input.consume_attack(); // Clear any buffered attacks on death
         return;
     }
 
@@ -69,7 +71,9 @@ pub fn player_movement(
 
     let is_jumping = current_anim.0 == Some(animations.jump_index) && !anim_player.all_finished();
 
-    if mouse_button.just_pressed(MouseButton::Left) && !is_attacking && !is_jumping && grounded {
+    // Use buffered attack input - allows attacks in air and with slight input delay tolerance
+    if input.attack_buffered() && !is_attacking && !is_jumping {
+        input.consume_attack();
         anim_player.stop_all();
         anim_player.play(animations.attack_index);
         current_anim.0 = Some(animations.attack_index);

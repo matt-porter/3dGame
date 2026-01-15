@@ -3,6 +3,7 @@ use bevy::{input::mouse::MouseMotion, prelude::*};
 use crate::states::AppState;
 
 pub const MOUSE_SENSITIVITY: f32 = 0.003;
+pub const ATTACK_BUFFER_TIME: f32 = 0.15;
 
 #[derive(Resource, Default)]
 pub struct PlayerInput {
@@ -13,6 +14,17 @@ pub struct PlayerInput {
     pub jumping: bool,
     pub sprinting: bool,
     pub camera_delta: Vec2,
+    pub attack_buffer: f32,
+}
+
+impl PlayerInput {
+    pub fn attack_buffered(&self) -> bool {
+        self.attack_buffer > 0.0
+    }
+
+    pub fn consume_attack(&mut self) {
+        self.attack_buffer = 0.0;
+    }
 }
 
 pub struct InputPlugin;
@@ -25,6 +37,7 @@ impl Plugin for InputPlugin {
 }
 
 fn read_input(
+    time: Res<Time>,
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse_button: Res<ButtonInput<MouseButton>>,
     mut mouse_motion: EventReader<MouseMotion>,
@@ -53,6 +66,13 @@ fn read_input(
         movement = movement.normalize();
     }
     input.movement = movement;
+
+    // Buffer attack input - only buffer if not already buffered (prevents spam-queuing)
+    if mouse_button.just_pressed(MouseButton::Left) && input.attack_buffer <= 0.0 {
+        input.attack_buffer = ATTACK_BUFFER_TIME;
+    } else if !mouse_button.just_pressed(MouseButton::Left) {
+        input.attack_buffer = (input.attack_buffer - time.delta_secs()).max(0.0);
+    }
 
     input.attacking = mouse_button.just_pressed(MouseButton::Left);
     input.blocking = mouse_button.pressed(MouseButton::Right);

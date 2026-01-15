@@ -22,6 +22,10 @@
 
 ## Completed Recently
 
+- [x] Improve attack responsiveness
+  - Added attack input buffer (0.15s window)
+  - Allow attacks while airborne (removed grounded requirement)
+
 - [x] Scale down characters and adjust world proportions
   - Reduced castle scale from 15x to 2x
   - Added CHARACTER_SCALE constant (0.2) for player and enemies
