@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-pub const ENEMY_WALK_SPEED: f32 = 2.0;
-pub const ENEMY_CHASE_SPEED: f32 = 4.0;
-pub const ENEMY_DETECTION_RANGE: f32 = 8.0;
-pub const ENEMY_ATTACK_RANGE: f32 = 2.0;
-pub const ENEMY_PATROL_RANGE: f32 = 3.0;
+pub const ENEMY_WALK_SPEED: f32 = 0.4;
+pub const ENEMY_CHASE_SPEED: f32 = 0.8;
+pub const ENEMY_DETECTION_RANGE: f32 = 1.6;
+pub const ENEMY_ATTACK_RANGE: f32 = 0.4;
+pub const ENEMY_PATROL_RANGE: f32 = 0.6;
 
 #[derive(Component)]
 pub struct Enemy;

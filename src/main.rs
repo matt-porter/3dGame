@@ -12,6 +12,7 @@ use threegame::{
 };
 
 const CASTLE_SCALE: f32 = 2.0;
+const CHARACTER_SCALE: f32 = 0.2;
 
 fn main() {
     App::new()
@@ -81,16 +82,17 @@ fn setup(
     commands.spawn((
         SceneRoot(asset_server.load("models/Knight.glb#Scene0")),
         Transform::from_translation(PLAYER_START)
-            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI)),
+            .with_rotation(Quat::from_rotation_y(std::f32::consts::PI))
+            .with_scale(Vec3::splat(CHARACTER_SCALE)),
         Player,
         Health { current: 200.0, max: 200.0 },
         Stamina::default(),
         CombatStatus::default(),
         threegame::gameplay::player::VerticalVelocity::default(),
         RigidBody::KinematicPositionBased,
-        Collider::capsule_y(0.5, 0.3),
+        Collider::capsule_y(0.5 * CHARACTER_SCALE, 0.3 * CHARACTER_SCALE),
         KinematicCharacterController {
-            snap_to_ground: Some(CharacterLength::Absolute(0.5)),
+            snap_to_ground: Some(CharacterLength::Absolute(0.1)),
             ..default()
         },
     ));
@@ -104,7 +106,8 @@ fn setup(
     for pos in enemy_positions {
         commands.spawn((
             SceneRoot(asset_server.load("models/Knight.glb#Scene0")),
-            Transform::from_translation(pos),
+            Transform::from_translation(pos)
+                .with_scale(Vec3::splat(CHARACTER_SCALE)),
             Enemy,
             EnemyAi {
                 home_position: pos,
@@ -113,9 +116,9 @@ fn setup(
             Health::default(),
             CombatStatus::default(),
             RigidBody::KinematicPositionBased,
-            Collider::capsule_y(0.5, 0.3),
+            Collider::capsule_y(0.5 * CHARACTER_SCALE, 0.3 * CHARACTER_SCALE),
             KinematicCharacterController {
-                snap_to_ground: Some(CharacterLength::Absolute(0.5)),
+                snap_to_ground: Some(CharacterLength::Absolute(0.1)),
                 ..default()
             },
         ));
@@ -123,7 +126,7 @@ fn setup(
 
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, PLAYER_START.y + 5.0, 10.0).looking_at(PLAYER_START, Vec3::Y),
+        Transform::from_xyz(0.0, PLAYER_START.y + 1.0, 2.0).looking_at(PLAYER_START, Vec3::Y),
         FollowCamera,
     ));
 

@@ -162,14 +162,14 @@ fn spawn_enemy_health_bars(
             continue;
         }
 
-        let bg_mesh = meshes.add(Cuboid::new(1.0, 0.1, 0.05));
+        let bg_mesh = meshes.add(Cuboid::new(0.3, 0.03, 0.015));
         let bg_material = materials.add(StandardMaterial {
             base_color: Color::srgb(0.2, 0.2, 0.2),
             unlit: true,
             ..default()
         });
 
-        let fill_mesh = meshes.add(Cuboid::new(1.0, 0.1, 0.05));
+        let fill_mesh = meshes.add(Cuboid::new(0.3, 0.03, 0.015));
         let fill_material = materials.add(StandardMaterial {
             base_color: Color::srgb(0.8, 0.2, 0.2),
             unlit: true,
@@ -179,14 +179,14 @@ fn spawn_enemy_health_bars(
         commands.spawn((
             Mesh3d(bg_mesh),
             MeshMaterial3d(bg_material),
-            Transform::from_xyz(0.0, 2.5, 0.0),
+            Transform::from_xyz(0.0, 0.5, 0.0),
             EnemyHealthBar { enemy: enemy_entity },
         ));
 
         commands.spawn((
             Mesh3d(fill_mesh),
             MeshMaterial3d(fill_material),
-            Transform::from_xyz(0.0, 2.5, 0.03),
+            Transform::from_xyz(0.0, 0.5, 0.01),
             EnemyHealthBarFill { enemy: enemy_entity },
         ));
     }
@@ -210,7 +210,7 @@ fn update_enemy_health_bars(
 
     for (mut bar_transform, health_bar) in bar_query.iter_mut() {
         if let Ok((enemy_transform, _health)) = enemy_query.get(health_bar.enemy) {
-            bar_transform.translation = enemy_transform.translation + Vec3::Y * 2.5;
+            bar_transform.translation = enemy_transform.translation + Vec3::Y * 0.5;
             bar_transform.look_at(camera_transform.translation, Vec3::Y);
         }
     }
@@ -218,12 +218,12 @@ fn update_enemy_health_bars(
     for (mut fill_transform, health_bar_fill) in fill_query.iter_mut() {
         if let Ok((enemy_transform, health)) = enemy_query.get(health_bar_fill.enemy) {
             let health_percent = health.current / health.max;
-            fill_transform.translation = enemy_transform.translation + Vec3::Y * 2.5;
+            fill_transform.translation = enemy_transform.translation + Vec3::Y * 0.5;
             fill_transform.look_at(camera_transform.translation, Vec3::Y);
             fill_transform.scale.x = health_percent.max(0.0);
             let local_forward = fill_transform.forward();
             let local_right = local_forward.cross(Vec3::Y).normalize();
-            fill_transform.translation -= local_right * (1.0 - health_percent) * 0.5;
+            fill_transform.translation -= local_right * (1.0 - health_percent) * 0.15;
         }
     }
 }

@@ -73,7 +73,7 @@ pub fn combat_system(
             && !player_combat.is_hit
             && !player_combat.is_dead
         {
-            let impact_pos = player_pos.lerp(enemy_pos, 0.3) + Vec3::Y * 1.0;
+            let impact_pos = player_pos.lerp(enemy_pos, 0.3) + Vec3::Y * 0.2;
 
             if player_combat.is_blocking {
                 info!("Player blocked attack!");
@@ -141,7 +141,7 @@ pub fn combat_system(
                     && !enemy_combat.is_hit
                     && !enemy_combat.is_dead
                 {
-                    let impact_pos = enemy_pos.lerp(player_pos, 0.3) + Vec3::Y * 1.0;
+                    let impact_pos = enemy_pos.lerp(player_pos, 0.3) + Vec3::Y * 0.2;
                     hit_events.send(HitEvent {
                         position: impact_pos,
                         blocked: false,

@@ -4,9 +4,9 @@ use bevy_rapier3d::prelude::*;
 use super::{FollowCamera, PlayerYaw};
 use crate::gameplay::player::Player;
 
-pub const CAMERA_DISTANCE: f32 = 10.0;
-pub const CAMERA_HEIGHT: f32 = 5.0;
-pub const CAMERA_COLLISION_OFFSET: f32 = 0.3;
+pub const CAMERA_DISTANCE: f32 = 2.0;
+pub const CAMERA_HEIGHT: f32 = 1.0;
+pub const CAMERA_COLLISION_OFFSET: f32 = 0.1;
 pub const CAMERA_SMOOTHING: f32 = 10.0;
 
 pub fn camera_follow_with_collision(
@@ -36,7 +36,7 @@ pub fn camera_follow_with_collision(
     );
     let desired_pos = player_pos + offset;
 
-    let ray_origin = player_pos + Vec3::Y * 1.5;
+    let ray_origin = player_pos + Vec3::Y * 0.3;
     let ray_dir = (desired_pos - ray_origin).normalize();
     let ray_length = (desired_pos - ray_origin).length();
 
@@ -62,5 +62,5 @@ pub fn camera_follow_with_collision(
         .translation
         .lerp(final_pos, smoothing.min(1.0));
 
-    camera_transform.look_at(player_pos + Vec3::Y * 1.0, Vec3::Y);
+    camera_transform.look_at(player_pos + Vec3::Y * 0.2, Vec3::Y);
 }

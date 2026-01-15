@@ -22,6 +22,17 @@
 
 ## Completed Recently
 
+- [x] Scale down characters and adjust world proportions
+  - Reduced castle scale from 15x to 2x
+  - Added CHARACTER_SCALE constant (0.2) for player and enemies
+  - Adjusted physics colliders proportionally
+  - Scaled camera distance/height/offsets for smaller characters
+  - Adjusted enemy AI ranges (detection, attack, patrol speeds)
+  - Adjusted player movement speeds, gravity, jump velocity
+  - Scaled enemy health bar positions and mesh sizes
+  - Scaled combat impact effect positions
+
+
 - [x] Visual effects and UI
   - Impact spark particles on hits (orange) and blocks (blue)
   - Player health bar HUD at top-left
