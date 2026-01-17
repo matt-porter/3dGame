@@ -1,3 +1,4 @@
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 use bevy::prelude::*;
 use bevy::window::CursorGrabMode;
 use bevy_rapier3d::prelude::*;
@@ -57,12 +58,30 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    let ground_texture: Handle<Image> = asset_server.load("textures/ground.png");
+    let ground_texture: Handle<Image> = asset_server.load_with_settings(
+        "textures/ground.png",
+        |s: &mut ImageLoaderSettings| {
+            s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                address_mode_u: ImageAddressMode::Repeat,
+                address_mode_v: ImageAddressMode::Repeat,
+                ..default()
+            });
+        },
+    );
+    let mut ground_mesh = Plane3d::default().mesh().size(500.0, 500.0).build();
+    if let Some(uvs) = ground_mesh.attribute_mut(Mesh::ATTRIBUTE_UV_0) {
+        if let bevy::render::mesh::VertexAttributeValues::Float32x2(uv_data) = uvs {
+            for uv in uv_data.iter_mut() {
+                uv[0] *= 50.0;
+                uv[1] *= 50.0;
+            }
+        }
+    }
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0).build())),
+        Mesh3d(meshes.add(ground_mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color_texture: Some(ground_texture),
-            uv_transform: bevy::math::Affine2::from_scale(Vec2::splat(100.0)),
+            perceptual_roughness: 0.9,
             ..default()
         })),
         Transform::from_xyz(0.0, 0.0, 0.0),
