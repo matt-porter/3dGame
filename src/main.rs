@@ -57,9 +57,14 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
+    let ground_texture: Handle<Image> = asset_server.load("textures/ground.png");
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.2, 0.4, 0.2))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0).build())),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color_texture: Some(ground_texture),
+            uv_transform: bevy::math::Affine2::from_scale(Vec2::splat(100.0)),
+            ..default()
+        })),
         Transform::from_xyz(0.0, 0.0, 0.0),
         RigidBody::Fixed,
         Collider::halfspace(Vec3::Y).unwrap(),

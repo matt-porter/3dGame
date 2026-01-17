@@ -7,7 +7,7 @@ use crate::gameplay::combat::{Stamina, DODGE_STAMINA_COST};
 
 use super::{Player, VerticalVelocity};
 
-pub const DODGE_SPEED: f32 = 15.0;
+pub const DODGE_SPEED: f32 = 3.0;
 pub const DODGE_DURATION: f32 = 0.4;
 
 pub const DODGE_FORWARD_ANIMATION: &str = "Dodge_Forward";
